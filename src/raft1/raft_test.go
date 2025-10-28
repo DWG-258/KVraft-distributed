@@ -10,6 +10,8 @@ package raft
 
 import (
 	"fmt"
+	"strconv"
+
 	// "log"
 	"math/rand"
 	"sync"
@@ -17,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"6.5840/tester1"
+	tester "6.5840/tester1"
 )
 
 // The tester generously allows solutions to complete elections in one second
@@ -63,12 +65,13 @@ func TestReElection3A(t *testing.T) {
 	ts.Begin("Test (3A): election after network failure")
 
 	leader1 := ts.checkOneLeader()
-
+	print("disconnecting leader " + strconv.Itoa((leader1)%servers) + "\n")
 	// if the leader disconnects, a new one should be elected.
 	ts.g.DisconnectAll(leader1)
 	tester.AnnotateConnection(ts.g.GetConnected())
 	ts.checkOneLeader()
 
+	print("reconnecting leader" + strconv.Itoa((leader1)%servers) + "\n")
 	// if the old leader rejoins, that shouldn't
 	// disturb the new leader. and the old leader
 	// should switch to follower.
@@ -76,6 +79,7 @@ func TestReElection3A(t *testing.T) {
 	tester.AnnotateConnection(ts.g.GetConnected())
 	leader2 := ts.checkOneLeader()
 
+	print("disconnected more servers that cant vote " + strconv.Itoa(leader2) + strconv.Itoa((leader2+1)%servers) + "\n")
 	// if there's no quorum, no new leader should
 	// be elected.
 	ts.g.DisconnectAll(leader2)
@@ -85,17 +89,21 @@ func TestReElection3A(t *testing.T) {
 
 	// check that the one connected server
 	// does not think it is the leader.
+	print("checking no leader")
 	ts.checkNoLeader()
-
+	print("reconnected one node " + strconv.Itoa((leader2+1)%servers) + "\n")
 	// if a quorum arises, it should elect a leader.
 	ts.g.ConnectOne((leader2 + 1) % servers)
 	tester.AnnotateConnection(ts.g.GetConnected())
 	ts.checkOneLeader()
 
+	print("reconnected all node " + strconv.Itoa((leader2)%servers) + "\n")
 	// re-join of last node shouldn't prevent leader from existing.
 	ts.g.ConnectOne(leader2)
 	tester.AnnotateConnection(ts.g.GetConnected())
 	ts.checkOneLeader()
+	return
+
 }
 
 func TestManyElections3A(t *testing.T) {

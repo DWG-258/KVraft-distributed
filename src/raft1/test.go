@@ -2,6 +2,8 @@ package raft
 
 import (
 	"fmt"
+	"log"
+
 	//log
 	"math/rand"
 	"sync"
@@ -11,7 +13,7 @@ import (
 
 	"6.5840/labrpc"
 	"6.5840/raftapi"
-	"6.5840/tester1"
+	tester "6.5840/tester1"
 )
 
 type Test struct {
@@ -69,8 +71,11 @@ func (ts *Test) checkOneLeader() int {
 
 		leaders := make(map[int][]int)
 		for i := 0; i < ts.n; i++ {
+
 			if ts.g.IsConnected(i) {
+
 				if term, leader := ts.srvs[i].GetState(); leader {
+
 					leaders[term] = append(leaders[term], i)
 				}
 			}
@@ -131,7 +136,7 @@ func (ts *Test) checkLogs(i int, m raftapi.ApplyMsg) (string, bool) {
 	me := ts.srvs[i]
 	for j, rs := range ts.srvs {
 		if old, oldok := rs.Logs(m.CommandIndex); oldok && old != v {
-			//log.Printf("%v: log %v; server %v\n", i, me.logs, rs.logs)
+			log.Printf("%v: log %v; server %v\n", i, me.logs, rs.logs)
 			// some server has already committed a different value for this entry!
 			err_msg = fmt.Sprintf("commit index=%v server=%v %v != server=%v %v",
 				m.CommandIndex, i, m.Command, j, old)
@@ -150,15 +155,20 @@ func (ts *Test) checkLogs(i int, m raftapi.ApplyMsg) (string, bool) {
 func (ts *Test) checkNoLeader() {
 	tester.AnnotateCheckerBegin("checking no unexpected leader among connected servers")
 	for i := 0; i < ts.n; i++ {
+
 		if ts.g.IsConnected(i) {
+
 			_, is_leader := ts.srvs[i].GetState()
+
 			if is_leader {
+
 				details := fmt.Sprintf("leader = %v", i)
 				tester.AnnotateCheckerFailure("unexpected leader found", details)
 				ts.Fatalf(details)
 			}
 		}
 	}
+
 	tester.AnnotateCheckerSuccess("no unexpected leader", "no unexpected leader")
 }
 
@@ -190,7 +200,7 @@ func (ts *Test) nCommitted(index int) (int, any) {
 		}
 
 		cmd1, ok := rs.Logs(index)
-
+		// fmt.Println("cmd1:", cmd1)
 		if ok {
 			if count > 0 && cmd != cmd1 {
 				text := fmt.Sprintf("committed values at index %v do not match (%v != %v)",
@@ -257,6 +267,8 @@ func (ts *Test) one(cmd any, expectedServers int, retry bool) int {
 			t1 := time.Now()
 			for time.Since(t1).Seconds() < 2 {
 				nd, cmd1 := ts.nCommitted(index)
+				fmt.Println("cmd:", cmd)
+				fmt.Println("cmd1:", cmd1)
 				if nd > 0 && nd >= expectedServers {
 					// committed
 					if cmd1 == cmd {

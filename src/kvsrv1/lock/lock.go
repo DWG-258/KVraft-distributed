@@ -1,7 +1,10 @@
 package lock
 
 import (
-	"6.5840/kvtest1"
+	"time"
+
+	"6.5840/kvsrv1/rpc"
+	kvtest "6.5840/kvtest1"
 )
 
 type Lock struct {
@@ -9,7 +12,10 @@ type Lock struct {
 	// the specific Clerk type of ck but promises that ck supports
 	// Put and Get.  The tester passes the clerk in when calling
 	// MakeLock().
-	ck kvtest.IKVClerk
+	ck          kvtest.IKVClerk
+	lockversion rpc.Tversion
+	lockname    string
+	LockID      string
 	// You may add code here
 }
 
@@ -21,13 +27,59 @@ type Lock struct {
 func MakeLock(ck kvtest.IKVClerk, l string) *Lock {
 	lk := &Lock{ck: ck}
 	// You may add code here
+	lk.lockname = l
 	return lk
 }
 
+const (
+	Locked   = "locked"
+	Unlocked = "unlocked"
+)
+
 func (lk *Lock) Acquire() {
 	// Your code here
+	lk.LockID = kvtest.RandValue(8)
+
+	for {
+		lockstate, lockversion, err := lk.ck.Get(lk.lockname)
+		if err == rpc.ErrNoKey && lockversion == 0 {
+			//first get lock ,no lock ,set lock
+			ok := lk.ck.Put(lk.lockname, lk.LockID+Locked, 0)
+			if ok == rpc.OK {
+				lk.lockversion = lockversion + 1
+				return
+			}
+		} else if err == rpc.OK {
+			if lockstate == Unlocked {
+				//acquire success
+				ok := lk.ck.Put(lk.lockname, lk.LockID+Locked, lockversion)
+				if ok == rpc.OK || ok == rpc.ErrMaybe {
+					lk.lockversion = lockversion + 1
+					return
+				}
+
+			}
+
+		}
+
+	}
+
 }
 
 func (lk *Lock) Release() {
 	// Your code here
+	for {
+		err := lk.ck.Put(lk.lockname, Unlocked, lk.lockversion)
+		switch err {
+		case rpc.OK:
+			return
+		case rpc.ErrMaybe:
+			return
+		}
+		print("lock")
+
+		time.Sleep(1000 * time.Millisecond)
+
+	}
+
 }

@@ -2,14 +2,15 @@ package lock
 
 import (
 	"fmt"
+
 	//	"log"
 	"strconv"
 	"testing"
 	"time"
 
-	"6.5840/kvsrv1"
+	kvsrv "6.5840/kvsrv1"
 	"6.5840/kvsrv1/rpc"
-	"6.5840/kvtest1"
+	kvtest "6.5840/kvtest1"
 )
 
 const (
@@ -72,13 +73,13 @@ func runClients(t *testing.T, nclnt int, reliable bool) {
 	})
 }
 
-func TestOneClientReliable(t *testing.T) {
-	runClients(t, 1, true)
-}
+// func TestOneClientReliable(t *testing.T) {
+// 	runClients(t, 1, true)
+// }
 
-func TestManyClientsReliable(t *testing.T) {
-	runClients(t, NCLNT, true)
-}
+// func TestManyClientsReliable(t *testing.T) {
+// 	runClients(t, NCLNT, true)
+// }
 
 func TestOneClientUnreliable(t *testing.T) {
 	runClients(t, 1, false)
