@@ -159,6 +159,7 @@ func TestBasicAgree3B(t *testing.T) {
 			t.Fatalf("got index %v but expected %v", xindex, index)
 		}
 	}
+
 }
 
 // check, based on counting bytes of RPCs, that
@@ -216,6 +217,7 @@ func TestFollowerFailure3B(t *testing.T) {
 	time.Sleep(RaftElectionTimeout)
 	ts.one(103, servers-1, false)
 
+	print("disconnect the remaining follower")
 	// disconnect the remaining follower
 	leader2 := ts.checkOneLeader()
 	ts.g.DisconnectAll((leader2 + 1) % servers)

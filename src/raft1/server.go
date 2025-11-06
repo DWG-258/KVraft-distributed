@@ -89,7 +89,9 @@ func (rs *rfsrv) Raft() raftapi.Raft {
 func (rs *rfsrv) Logs(i int) (any, bool) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
+
 	v, ok := rs.logs[i]
+	// fmt.Println("logs[i]", i, v)
 	return v, ok
 }
 
@@ -97,11 +99,11 @@ func (rs *rfsrv) Logs(i int) (any, bool) {
 // contents
 func (rs *rfsrv) applier(applyCh chan raftapi.ApplyMsg) {
 	for m := range applyCh {
-		print("111")
+
 		if m.CommandValid == false {
 			// ignore other types of ApplyMsg
 		} else {
-			print("success read")
+			// print("success read log")
 			err_msg, prevok := rs.ts.checkLogs(rs.me, m)
 			if m.CommandIndex > 1 && prevok == false {
 				err_msg = fmt.Sprintf("server %v apply out of order %v", rs.me, m.CommandIndex)

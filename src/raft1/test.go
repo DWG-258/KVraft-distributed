@@ -136,13 +136,16 @@ func (ts *Test) checkLogs(i int, m raftapi.ApplyMsg) (string, bool) {
 	me := ts.srvs[i]
 	for j, rs := range ts.srvs {
 		if old, oldok := rs.Logs(m.CommandIndex); oldok && old != v {
+			fmt.Printf("%v: log %v; server %v\n", i, me.logs, rs.logs)
 			log.Printf("%v: log %v; server %v\n", i, me.logs, rs.logs)
 			// some server has already committed a different value for this entry!
 			err_msg = fmt.Sprintf("commit index=%v server=%v %v != server=%v %v",
 				m.CommandIndex, i, m.Command, j, old)
 		}
 	}
+	// fmt.Println("write log into log")
 	_, prevok := me.logs[m.CommandIndex-1]
+	// fmt.Println("index command:", m.CommandIndex, m.Command)
 	me.logs[m.CommandIndex] = v
 	if m.CommandIndex > ts.maxIndex {
 		ts.maxIndex = m.CommandIndex
@@ -200,6 +203,8 @@ func (ts *Test) nCommitted(index int) (int, any) {
 		}
 
 		cmd1, ok := rs.Logs(index)
+		// fmt.Println("ok:", ok)
+		// fmt.Println("index:", index)
 		// fmt.Println("cmd1:", cmd1)
 		if ok {
 			if count > 0 && cmd != cmd1 {
@@ -252,7 +257,7 @@ func (ts *Test) one(cmd any, expectedServers int, retry bool) int {
 				ts.srvs[starts].mu.Unlock()
 			}
 			if rf != nil {
-				//log.Printf("peer %d Start %v", starts, cmd)
+				// log.Printf("peer %d Start %v", starts, cmd)
 				index1, _, ok := rf.Start(cmd)
 				if ok {
 					index = index1
@@ -267,10 +272,12 @@ func (ts *Test) one(cmd any, expectedServers int, retry bool) int {
 			t1 := time.Now()
 			for time.Since(t1).Seconds() < 2 {
 				nd, cmd1 := ts.nCommitted(index)
-				fmt.Println("cmd:", cmd)
-				fmt.Println("cmd1:", cmd1)
+				// fmt.Println("check index ", index)
+				// fmt.Println("cmd1", cmd1)
+				// fmt.Println("cmd:", cmd)
 				if nd > 0 && nd >= expectedServers {
 					// committed
+
 					if cmd1 == cmd {
 						// and it was the command we submitted.
 						desp := fmt.Sprintf("agreement of %.8s reached", textcmd)
@@ -283,6 +290,9 @@ func (ts *Test) one(cmd any, expectedServers int, retry bool) int {
 			if retry == false {
 				desp := fmt.Sprintf("agreement of %.8s failed", textcmd)
 				tester.AnnotateCheckerFailure(desp, "failed after submitting command")
+				// fmt.Println(index)
+				// _, cmd1 := ts.nCommitted(index)
+				// fmt.Println("cmd1", cmd1)
 				ts.Fatalf("one(%v) failed to reach agreement", cmd)
 			}
 		} else {
