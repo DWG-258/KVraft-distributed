@@ -203,9 +203,7 @@ func (ts *Test) nCommitted(index int) (int, any) {
 		}
 
 		cmd1, ok := rs.Logs(index)
-		// fmt.Println("ok:", ok)
-		// fmt.Println("index:", index)
-		// fmt.Println("cmd1:", cmd1)
+
 		if ok {
 			if count > 0 && cmd != cmd1 {
 				text := fmt.Sprintf("committed values at index %v do not match (%v != %v)",
@@ -259,8 +257,10 @@ func (ts *Test) one(cmd any, expectedServers int, retry bool) int {
 			if rf != nil {
 				// log.Printf("peer %d Start %v", starts, cmd)
 				index1, _, ok := rf.Start(cmd)
+
 				if ok {
 					index = index1
+
 					break
 				}
 			}
@@ -272,9 +272,10 @@ func (ts *Test) one(cmd any, expectedServers int, retry bool) int {
 			t1 := time.Now()
 			for time.Since(t1).Seconds() < 2 {
 				nd, cmd1 := ts.nCommitted(index)
-				// fmt.Println("check index ", index)
-				// fmt.Println("cmd1", cmd1)
-				// fmt.Println("cmd:", cmd)
+				// fmt.Println("CMD1:", cmd1)
+				// fmt.Println("index", index)
+				// fmt.Println("cmd", cmd)
+				// fmt.Println("nd", nd)
 				if nd > 0 && nd >= expectedServers {
 					// committed
 
@@ -290,9 +291,7 @@ func (ts *Test) one(cmd any, expectedServers int, retry bool) int {
 			if retry == false {
 				desp := fmt.Sprintf("agreement of %.8s failed", textcmd)
 				tester.AnnotateCheckerFailure(desp, "failed after submitting command")
-				// fmt.Println(index)
-				// _, cmd1 := ts.nCommitted(index)
-				// fmt.Println("cmd1", cmd1)
+
 				ts.Fatalf("one(%v) failed to reach agreement", cmd)
 			}
 		} else {
@@ -300,9 +299,11 @@ func (ts *Test) one(cmd any, expectedServers int, retry bool) int {
 		}
 	}
 	if ts.checkFinished() == false {
+
 		desp := fmt.Sprintf("agreement of %.8s failed", textcmd)
 		tester.AnnotateCheckerFailure(desp, "failed after 10-second timeout")
 		ts.Fatalf("one(%v) failed to reach agreement", cmd)
+
 	}
 	return -1
 }

@@ -544,6 +544,8 @@ func TestBackup3B(t *testing.T) {
 
 	// put leader and one follower in a partition
 	leader1 := ts.checkOneLeader()
+	fmt.Println("leader1:", leader1)
+	fmt.Println("disconnnect next 3")
 	ts.g.DisconnectAll((leader1 + 2) % servers)
 	ts.g.DisconnectAll((leader1 + 3) % servers)
 	ts.g.DisconnectAll((leader1 + 4) % servers)
@@ -557,6 +559,7 @@ func TestBackup3B(t *testing.T) {
 	text := fmt.Sprintf("submitted 50 commands to %v", leader1)
 	tester.AnnotateInfoInterval(start, text, text)
 
+	fmt.Println("above submit to leader1,wont commit")
 	time.Sleep(RaftElectionTimeout / 2)
 
 	ts.g.DisconnectAll((leader1 + 0) % servers)
@@ -572,7 +575,7 @@ func TestBackup3B(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		ts.one(rand.Int(), 3, true)
 	}
-
+	fmt.Println("sucessfull  commit new 50 to new leader:")
 	// now another partitioned leader and one follower
 	leader2 := ts.checkOneLeader()
 	other := (leader1 + 2) % servers
@@ -581,6 +584,8 @@ func TestBackup3B(t *testing.T) {
 	}
 	ts.g.DisconnectAll(other)
 	tester.AnnotateConnection(ts.g.GetConnected())
+
+	fmt.Println("4")
 
 	// lots more commands that won't commit
 	start = tester.GetAnnotateTimestamp()
@@ -592,6 +597,7 @@ func TestBackup3B(t *testing.T) {
 
 	time.Sleep(RaftElectionTimeout / 2)
 
+	fmt.Println("brinbring original leader back to life,g")
 	// bring original leader back to life,
 	for i := 0; i < servers; i++ {
 		ts.g.DisconnectAll(i)
@@ -600,16 +606,17 @@ func TestBackup3B(t *testing.T) {
 	ts.g.ConnectOne((leader1 + 1) % servers)
 	ts.g.ConnectOne(other)
 	tester.AnnotateConnection(ts.g.GetConnected())
-
+	fmt.Println("5555")
 	// lots of successful commands to new group.
 	for i := 0; i < 50; i++ {
 		ts.one(rand.Int(), 3, true)
 	}
-
+	fmt.Println("66666666")
 	// now everyone
 	for i := 0; i < servers; i++ {
 		ts.g.ConnectOne(i)
 	}
+	fmt.Println("connect everone")
 	tester.AnnotateConnection(ts.g.GetConnected())
 	ts.one(rand.Int(), servers, true)
 }

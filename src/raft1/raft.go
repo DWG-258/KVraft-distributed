@@ -9,7 +9,6 @@ package raft
 import (
 	//	"bytes"
 
-	"fmt"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -53,8 +52,9 @@ type Raft struct {
 	voteList        []int
 	LeaderSending   bool //is leader sending AppendEntries to follower
 	// AgreeCommitCount []int //list for log index agreement
-	nextIndex  []int //log index that leader should send to follower
-	matchIndex []int //max log index that follower has received
+	nextIndex         []int //log index that leader should send to follower
+	matchIndex        []int //max log index that follower has received
+	firstCurTermIndex int   //log index of last term,such as   term:1 1 1 2 2 2 3 ,cur term=3,last Term index = 7
 }
 
 // return currentTerm and whether this server
@@ -211,47 +211,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	reply.Term = rf.currentTerm
 }
 
-// func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-// 	// Your code here (3A, 3B).
-// 	rf.mu.Lock()
-// 	defer rf.mu.Unlock()
-
-// 	rf.electionTimeout = int64(300 + rand.Intn(300))
-// 	rf.currentTerm = args.Term
-
-// 	reply.VoteGranted = false
-// 	if args.Term > rf.currentTerm {
-// 		if rf.votedFor != -1 {
-// 			return
-// 		}
-
-// 		rf.votedFor = args.CandidateId
-
-// 		if len(rf.log) == 0 {
-// 			rf.votedFor = args.CandidateId
-// 			reply.VoteGranted = true
-// 		} else {
-// 			if args.LastLogterm >= rf.log[len(rf.log)-1].Term {
-// 				reply.VoteGranted = true
-// 			} else if args.LastLogterm == rf.log[len(rf.log)-1].Term && args.LastLogIndex >= len(rf.log) {
-
-// 				rf.votedFor = args.CandidateId
-// 				reply.VoteGranted = true
-
-// 			}
-
-// 		}
-
-// 		//if revice a bigger term, become follower and reset timeout
-
-//			rf.role = follower //role change to follower
-//			return
-//		} else {
-//			reply.VoteGranted = false
-//			reply.Term = rf.currentTerm
-//			return
-//		}
-//	}
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -263,57 +222,59 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if args.Term >= rf.currentTerm {
 		rf.currentTerm = args.Term
 		rf.role = follower
-		reply.Success = true
 	} else {
 		reply.Term = rf.currentTerm
 		reply.Success = false
 		return
 	}
 
-	if args.LeaderCommit > rf.commitIndex {
-		rf.commitIndex = args.LeaderCommit
+	//follower lack of log
+	if args.PrevLogIndex > len(rf.log) {
+		reply.Success = false
+		reply.ConflictIndex = len(rf.log)
+		reply.ConflictTerm = -1
+		// fmt.Println("follower index < leader log index")
+		// fmt.Println("me:", rf.me)
+		return
+	}
+
+	if args.PrevLogIndex > 0 {
+		if rf.log[args.PrevLogIndex-1].Term != args.PrevLogTerm {
+			reply.Success = false
+			reply.ConflictTerm = rf.log[args.PrevLogIndex-1].Term
+			reply.ConflictIndex = args.PrevLogIndex
+
+			for i := len(rf.log); i > 0; i-- {
+				if rf.log[i-1].Term == reply.ConflictTerm {
+					continue
+				} else {
+					reply.ConflictIndex = i
+				}
+			}
+
+			// rf.log = rf.log[:rf.commitIndex-1]
+			// fmt.Println("me:", rf.me)
+			// fmt.Println("follower term != leader log term,need to rollback")
+			// fmt.Println("len(log):", len(rf.log))
+			return
+		}
+		//当term对时能更新commitIndex
+		if args.LeaderCommit > rf.commitIndex {
+			rf.commitIndex = args.LeaderCommit
+			// fmt.Println("latest commit:", rf.commitIndex)
+		}
 	}
 
 	// fmt.Println(len(args.Entries))
 	//log Replication
-	if args.Entries != nil {
-		//follower lack of log
-		if args.PrevLogIndex > len(rf.log) {
-			reply.Success = false
-			reply.ConflictIndex = len(rf.log)
-			reply.ConflictTerm = -1
-			fmt.Println("follower index < leader log index")
-			return
-		}
-
-		//<= log index
-		//update log,frist check log index and term
-		//TODO
-		if args.PrevLogIndex > 0 {
-			// fmt.Println("    ")
-			// fmt.Println("server:", rf.me)
-			// fmt.Println("previndex:", args.PrevLogIndex)
-			// fmt.Println("follower pervlogTerm::", rf.log[args.PrevLogIndex-1].Term)
-			// fmt.Println("perv logTerm:", args.PrevLogTerm)
-			// fmt.Println("log[last]:", rf.log[args.PrevLogIndex-1].Command)
-			if rf.log[args.PrevLogIndex-1].Term != args.PrevLogTerm {
-
-				fmt.Println(len(rf.log))
-				reply.Success = false
-				reply.ConflictTerm = rf.log[args.PrevLogIndex-1].Term
-				reply.ConflictIndex = args.PrevLogIndex
-				rf.log = rf.log[:args.PrevLogIndex-1]
-				fmt.Println("follower term != leader log term")
-				return
-			}
-		}
-
-		//prev log index == 0 and len(rf.log)==0  (frist rev)
-
-		// fmt.Println("follower append log")
+	if len(args.Entries) > 0 {
 
 		//要保证prevlogindex后面是空的,例如 follower:1:10,2:20 leader:1:10,2:20,应该删除follower的2:20
+
 		rf.log = append(rf.log[:args.PrevLogIndex], args.Entries...)
+
+		// fmt.Println("me:", rf.me)
+		// fmt.Println("now my log len :", len(rf.log))
 
 		// fmt.Println("now me:", rf.me, "loglen:", len(rf.log))
 	}
@@ -395,45 +356,83 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 
 	index, term = rf.AppendLog(command)
 
-	go rf.WaitForCommit(index)
-
+	// go rf.WaitForCommit(index)
+	// fmt.Println("server:", rf.me)
 	// fmt.Println("start return index , term ,is lerader:", index, term, isLeader)
 	return index, term, isLeader
 }
 
-func (rf *Raft) WaitForCommit(index int) {
-	for !rf.killed() {
-		// print("wait for follower commit\n")
+// todo
+// func (rf *Raft) WaitForCommit(index int) {
 
-		rf.mu.Lock()
+// 	for !rf.killed() {
+// 		// print("wait for follower commit\n")
 
-		if rf.role != leader {
-			rf.mu.Unlock()
-			return
-		}
+// 		rf.mu.Lock()
 
+// 		if rf.role != leader {
+// 			rf.mu.Unlock()
+// 			return
+// 		}
+
+// 		AgreeCommitCount := 1
+// 		for i := 0; i < len(rf.matchIndex); i++ {
+// 			if rf.matchIndex[i] >= index {
+// 				AgreeCommitCount++
+// 			}
+// 		}
+
+// 		if AgreeCommitCount > len(rf.peers)/2 {
+// 			// print("success commit")
+// 			rf.commitIndex = index
+// 			rf.mu.Unlock()
+// 			return
+// 		}
+// 		rf.mu.Unlock()
+
+// 		time.Sleep(time.Millisecond * 10)
+// 	}
+
+// }
+
+// TO DO  commit 的并发问题，或者其他的
+func (rf *Raft) UpdateCommitIndex() {
+
+	// print("wait for follower commit\n")
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	rf.commitIndex = rf.lastApplied
+	for N := rf.commitIndex + 1; N <= len(rf.log); N++ {
 		AgreeCommitCount := 1
 		for i := 0; i < len(rf.matchIndex); i++ {
-			if rf.matchIndex[i] >= index {
+			if i == rf.me {
+				continue
+			}
+			if rf.matchIndex[i] >= N {
 				AgreeCommitCount++
 			}
 		}
 
-		if AgreeCommitCount > len(rf.peers)/2 {
+		if AgreeCommitCount > len(rf.peers)/2 && rf.log[N-1].Term == rf.currentTerm {
 			// print("success commit")
-			rf.commitIndex = index
-			rf.mu.Unlock()
-			return
-		}
-		rf.mu.Unlock()
+			rf.commitIndex = N
+			// fmt.Println("leader commit:", rf.me, "  ", rf.commitIndex)
 
-		time.Sleep(time.Millisecond * 10)
+		} else {
+			break
+		}
+
 	}
+	// fmt.Println("server:", rf.me)
+	// fmt.Println("my commit index:", rf.commitIndex)
 }
+
 func (rf *Raft) ApplyCommit() {
 	for !rf.killed() {
-		rf.mu.Lock()
+		time.Sleep(time.Millisecond * 100)
 
+		rf.mu.Lock()
 		if rf.commitIndex > rf.lastApplied && len(rf.log) > rf.lastApplied && len(rf.log) != 0 {
 			entry := raftapi.ApplyMsg{
 				CommandValid: true,
@@ -442,12 +441,11 @@ func (rf *Raft) ApplyCommit() {
 			}
 			//apply chan cant lock
 			rf.ApplyCh <- entry
-
+			// fmt.Println("server apply:", rf.me, "  ", entry.CommandIndex)
 			rf.lastApplied++
 		}
 		rf.mu.Unlock()
 
-		time.Sleep(time.Millisecond * 10)
 	}
 }
 
@@ -484,9 +482,22 @@ func (rf *Raft) CleanVoteList() {
 	}
 }
 
+func (rf *Raft) getPrevLogindex_term(peer int) (int, int) {
+	PrevLogIndex := rf.nextIndex[peer] - 1
+	PrevLogTerm := 0
+	if PrevLogIndex <= 0 {
+		PrevLogIndex = 0
+		PrevLogTerm = 0
+	} else {
+		PrevLogTerm = rf.log[PrevLogIndex-1].Term
+	}
+	return PrevLogIndex, PrevLogTerm
+}
+
 func (rf *Raft) Replication(peer int) {
+
 	for !rf.killed() {
-		time.Sleep(time.Millisecond * 10)
+		time.Sleep(time.Millisecond * 30)
 
 		rf.mu.Lock()
 		if rf.role != leader {
@@ -498,14 +509,9 @@ func (rf *Raft) Replication(peer int) {
 		//send appendEntries with log
 		AppendEntriesReply := AppendEntriesReply{}
 		//to make sure log copy is successful
-
-		AppendEntriesArgs.PrevLogIndex = rf.nextIndex[peer] - 1
-		if AppendEntriesArgs.PrevLogIndex <= 0 {
-			AppendEntriesArgs.PrevLogIndex = 0
-			AppendEntriesArgs.PrevLogTerm = 0
-		} else {
-			AppendEntriesArgs.PrevLogTerm = rf.log[AppendEntriesArgs.PrevLogIndex-1].Term
-		}
+		PrevLogIndex, PrevLogTerm := rf.getPrevLogindex_term(peer)
+		AppendEntriesArgs.PrevLogIndex = PrevLogIndex
+		AppendEntriesArgs.PrevLogTerm = PrevLogTerm
 
 		if rf.nextIndex[peer] <= len(rf.log) && rf.nextIndex[peer] > 0 {
 			entries := make([]Log, len(rf.log[rf.nextIndex[peer]-1:]))
@@ -527,7 +533,10 @@ func (rf *Raft) Replication(peer int) {
 				rf.mu.Lock()
 				rf.nextIndex[peer] = AppendEntriesArgs.PrevLogIndex + len(AppendEntriesArgs.Entries) + 1
 				rf.matchIndex[peer] = rf.nextIndex[peer] - 1
+
 				rf.mu.Unlock()
+
+				rf.UpdateCommitIndex()
 
 				continue
 			}
@@ -558,6 +567,9 @@ func (rf *Raft) Replication(peer int) {
 }
 
 func (rf *Raft) ReplicationLoop() {
+	// fmt.Println("now leader is :", rf.me)
+	// fmt.Println("now leader term is :", rf.currentTerm)
+	// fmt.Println("leader commit index and log len", rf.commitIndex, len(rf.log))
 	for i := 0; i < len(rf.peers); i++ {
 		if i != rf.me {
 			go rf.Replication(i)
@@ -580,6 +592,7 @@ func (rf *Raft) getVoteState() {
 		}
 
 		rf.mu.Lock()
+		rf.electionTimeout -= 10
 		if rf.voteList[rf.me] > len(rf.peers)/2 {
 
 			//clean voteList
@@ -620,8 +633,12 @@ func (rf *Raft) startElection() {
 	for i := 0; i < len(rf.peers); i++ {
 		if i != rf.me {
 			go func(peer int) {
+				RequestVoteArgs := RequestVoteArgs{rf.currentTerm, rf.me, len(rf.log), 0}
+				if len(rf.log) > 0 {
+					RequestVoteArgs.LastLogTerm = rf.log[len(rf.log)-1].Term
+				}
 				RequestVoteReply := RequestVoteReply{}
-				ok := rf.sendRequestVote(peer, &RequestVoteArgs{rf.currentTerm, rf.me, rf.commitIndex, rf.lastApplied}, &RequestVoteReply)
+				ok := rf.sendRequestVote(peer, &RequestVoteArgs, &RequestVoteReply)
 				if ok {
 					if RequestVoteReply.VoteGranted {
 						rf.mu.Lock()
@@ -635,7 +652,7 @@ func (rf *Raft) startElection() {
 	}
 
 	//get vote state
-	go rf.getVoteState()
+	rf.getVoteState()
 
 }
 
@@ -659,6 +676,7 @@ func (rf *Raft) heartbeat(peer int) {
 			Entries:      []Log{},
 			LeaderCommit: rf.commitIndex,
 		}
+		args.PrevLogIndex, args.PrevLogTerm = rf.getPrevLogindex_term(peer)
 		rf.mu.Unlock()
 
 		// AppendEntriesArgs.Entries = rf.log[AppendEntriesArgs.PrevLogIndex-1:]
