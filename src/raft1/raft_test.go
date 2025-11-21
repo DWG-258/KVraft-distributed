@@ -331,6 +331,7 @@ func TestFailNoAgree3B(t *testing.T) {
 	ts.g.DisconnectAll((leader + 3) % servers)
 	tester.AnnotateConnection(ts.g.GetConnected())
 
+	fmt.Println("3 follower disconnect")
 	index, _, ok := ts.srvs[leader].Raft().Start(20)
 	if ok != true {
 		t.Fatalf("leader rejected Start()")
@@ -340,7 +341,7 @@ func TestFailNoAgree3B(t *testing.T) {
 	}
 
 	time.Sleep(2 * RaftElectionTimeout)
-
+	fmt.Println("3 followerr resele")
 	n, _ := ts.nCommitted(index)
 	if n > 0 {
 		t.Fatalf("%v committed but no majority", n)
@@ -363,7 +364,7 @@ func TestFailNoAgree3B(t *testing.T) {
 		t.Fatalf("unexpected index %v", index2)
 	}
 
-	ts.one(1000, servers, true)
+	ts.one(1000, servers, false)
 }
 
 func TestConcurrentStarts3B(t *testing.T) {
